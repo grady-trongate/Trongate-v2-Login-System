@@ -1,38 +1,41 @@
 # Trongate v2 Login System
 
-A complete, config-driven multi-level authentication system for **Trongate v2**, demonstrating best-practice login workflows for **administrators** and **members**.
+A complete member authentication system for **Trongate v2**, demonstrating best-practice login workflows for **member accounts** — registration, login, logout, remember-me cookies, forgot-password flows, and account management.
 
-This repository provides the finished code for the *How To Build A Login System* chapter of **The Trongate Way** — a step-by-step guide to building secure, production-ready authentication without writing a single line of authentication logic.
+This repository provides the finished code for the *How To Build A Login System* chapter of **The Trongate Way** — a step-by-step guide to building member authentication using Trongate v2's config-driven login module.
+
+> **Administrators** are a special case in Trongate v2. The framework ships with a ready-made `trongate_administrators` module that provides login, CRUD, and `make_sure_allowed()` security out of the box. You do not need to build that from scratch. This repository focuses on what you **do** need to build: the member side.
 
 ## Features
 
-- **Multi-level authentication** — Administrators (level 1) and Members (level 2), each with their own database table, login identifiers, and redirect destinations
-- **Config-driven design** — Define user levels, identifiers, password fields, and security settings in a single `config/login.php` file
-- **Secret login words** — Clean, human-readable login URLs (`/tg-admin`, `/member-login`) instead of numeric level IDs
-- **Rate limiting** — Brute-force protection with configurable max failed attempts and block duration (15 minutes by default)
+- **Member registration** — Create accounts with username, email, and password
+- **Config-driven authentication** — Define member settings in a single `config/login.php` file
+- **Secret login words** — Clean member login URL (`/member-login`) instead of numeric level IDs
+- **Dual identifier login** — Members can log in with either their username or email address
+- **Rate limiting** — Brute-force protection with configurable max failed attempts and block duration
 - **Remember-me cookies** — Persistent session support for member accounts (30 days)
-- **Forgot-password flow** — Time-limited reset tokens with email notifications (configurable per level)
-- **Bcrypt password hashing** — Configurable cost factor (default 11)
-- **Session management** — Token-based authentication with automatic expiry
+- **Forgot-password flow** — Time-limited reset tokens with email notifications
+- **Bcrypt password hashing** — Configurable cost factor (default 11), always using `$this->login->hash_password()`
+- **Account management** — Protected dashboard, profile update, and password change
+- **Validation callbacks** — Unique username/email checks and password strength enforcement
 
 ## Files Included
 
 ```
 config/
-  login.php              — User level definitions and security settings
-  custom_routing.php     — Maps secret login words to controllers
+  login.php              — Member user level definition and security settings
+  custom_routing.php     — Maps member-login secret word to the login module
 
 modules/
-  trongate_administrators/
-    Trongate_administrators.php         — Admin controller (login, logout, CRUD)
-    Trongate_administrators_model.php   — Admin database operations
+  members/
+    Members.php                      — Member controller (login, logout, registration,
+                                       account management)
+    Members_model.php                — Member validation utilities
     views/
-      create.php          — Admin account create/edit form
-      delete_conf.php     — Delete confirmation page
-      manage.php          — Paginated admin list
-      not_found.php       — Record not found page
-      show.php            — Admin account detail view
-      update_password.php — Password update form
+      welcome.php         — Landing page after successful login
+      create_account.php  — Registration form
+      your_account.php    — Protected account dashboard
+      update_password.php — Password change form
 
 login.sql — Complete database schema (trongate_user_levels, trongate_users,
             trongate_tokens, trongate_administrators, members)
@@ -50,23 +53,19 @@ Visit the official site: [trongate.io](https://trongate.io)
 ## Installation
 
 1. **Install Trongate v2** (if not already done):
-   - Download the framework from GitHub: [trongate-framework](https://github.com/trongate/trongate-framework)
+   - Download the framework from GitHub: [trongate/trongate-framework](https://github.com/trongate/trongate-framework)
    - Follow the installation guide at [trongate.io/documentation](https://trongate.io/documentation)
 
 2. **Copy the configuration files**:
    ```bash
-   # Copy the login configuration
    cp config/login.php /path/to/your/project/config/login.php
-
-   # Merge custom routing with your existing routes
-   # Add the routes from config/custom_routing.php to your
+   # Merge the routes from config/custom_routing.php into your
    # project's config/custom_routing.php
    ```
 
-3. **Add the admin module**:
+3. **Add the members module**:
    ```bash
-   # Copy the trongate_administrators module
-   cp -r modules/trongate_administrators /path/to/your/project/modules/trongate_administrators
+   cp -r modules/members /path/to/your/project/modules/members
    ```
 
 4. **Create the database tables**:
@@ -76,30 +75,39 @@ Visit the official site: [trongate.io](https://trongate.io)
 
 5. **Configure the Trongate email module** (for forgot-password):
    - Create `config/trongate_email.php` with your SMTP credentials
-   - Refer to the [Trongate Email documentation](https://trongate.io/documentation) for details
+   - See the [Trongate Email documentation](https://trongate.io/documentation) for details
 
 ## URL Routes
 
 | URL | Purpose |
 |-----|---------|
-| `/tg-admin` | Admin login form |
-| `/tg-admin/submit_login` | Admin login submission |
-| `/trongate_administrators/manage` | Admin management panel (requires login) |
-| `/trongate_administrators/create` | Create a new admin account |
-| `/trongate_administrators/show/{id}` | View admin account details |
-| `/trongate_administrators/logout` | Log out of admin session |
 | `/member-login` | Member login form |
 | `/members/welcome` | Member home page (after login) |
+| `/members/logout` | Log out of member session |
+| `/members/create_account` | Registration form |
+| `/members/submit_create_account` | Process registration |
+| `/members/your_account` | Protected account dashboard |
+| `/members/update_password` | Change member password |
 | `/login/forgot_password/member-login` | Member forgot-password flow |
 
 ## Architecture
 
-The login system has four components that work together:
+The member authentication system has four components that work together:
 
-1. **`config/login.php`** — Defines user levels, their target tables, login identifiers, and security settings
-2. **`config/custom_routing.php`** — Maps secret login words to the correct authentication flow
-3. **`modules/login/Login.php`** — The core login controller that handles authentication, password resets, and session checks (included with Trongate v2)
-4. **`modules/trongate_administrators/Trongate_administrators.php`** — The admin panel controller that integrates with the login module
+1. **`config/login.php`** — Defines the member user level, target table (`members`), login identifiers (`username`, `email_address`), and security settings (remember-me, forgot-password, rate limiting)
+2. **`config/custom_routing.php`** — Maps the `member-login` secret word to the login module's controller
+3. **`modules/login/Login.php`** — The core login module (included with Trongate v2) that handles authentication, credential validation, token creation, rate limiting, and forgot-password
+4. **`modules/members/Members.php`** — Your custom controller with the welcome page, registration, account management, and logout
+
+### How the Login Flow Works
+
+1. Visitor navigates to `/member-login`
+2. Custom routing forwards to `login/login/member-login`
+3. The login module resolves the secret word to user level 2 (Members)
+4. If the member already has a valid token, they are redirected to `members/welcome`
+5. Otherwise, the login module renders the login form
+6. On submission, the login module validates credentials, enforces rate limiting, and creates a session token
+7. On success, the member is redirected to `members/welcome`
 
 ### Database Relationships
 
@@ -114,6 +122,16 @@ trongate_users ── shared identity registry (one row per real user)
 
 trongate_tokens ── session tokens linking user_id + user_level_id
 ```
+
+## Key Principles
+
+- The login module is **config-driven** — you configure, not code authentication logic
+- Each user level gets its own **database table** linked via `trongate_users`
+- **Secret login words** require matching entries in `custom_routing.php`
+- **Members** route through the login module directly; **administrators** use their own controller
+- Always use **`$this->login->hash_password()`** to hash passwords
+- Protect member-only pages with **`attempt_get_valid_token()`** or **`is_logged_in()`**
+- The **forgot-password** flow is built into the login module — enable it in config and configure SMTP
 
 ## License
 
